@@ -7,6 +7,7 @@ let gl;
 let program;
 let u_mouse;
 let a_pos;
+let text;
 
 function setupWebGL(evt) {
     window.removeEventListener(evt.type, setupWebGL, false);
@@ -42,7 +43,7 @@ function setupWebGL(evt) {
         const linkErrLog = gl.getProgramInfoLog(program);
         console.log(linkErrLog);
         cleanup();
-        document.querySelector("p").textContent = `Shader program did not link successfully. Error log: ${linkErrLog}`;
+        text.textContent = `Shader program did not link successfully. Error log: ${linkErrLog}`;
         return;
     }
 
@@ -68,7 +69,10 @@ function render() {
 }
 
 function mousemove(/** @type MouseEvent */ evt) {
-    gl.uniform2f(u_mouse, evt.offsetX / 256 - 1, 1 - evt.offsetY / 256);
+    let [x, y] = [evt.offsetX / 512 - 1, 1 - evt.offsetY / 512];
+
+    gl.uniform2f(u_mouse, x, y);
+    text.innerText = `${x}\n${y}`;
     render();
 }
 
@@ -119,7 +123,9 @@ function cleanup() {
 }
 
 function getRenderingContext() {
-    const canvas = document.querySelector("canvas");
+    text = document.querySelector('#text');
+
+    const canvas = document.querySelector('#canvas');
     
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
