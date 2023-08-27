@@ -1,85 +1,129 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<link href="style.css" rel="stylesheet" />
-		<script src="main.js"></script>
+<script type="x-shader/x-fragment" id="fragment-shader">
+	#version 100
 
-		<script type="x-shader/x-vertex" id="vertex-shader">
-			precision highp float;
+	precision highp float;
 
-			attribute vec3 a_pos;
+	uniform vec2 u_mouse;
 
-			varying vec2 v_pos;
+	varying vec2 v_pos;
 
-			void main() {
-			    gl_Position = vec4(a_pos, 1.0);
+	const float PI = 3.1415926538;
+	const float TAU = (PI * 2.0);
 
-			    v_pos = vec2(a_pos);
-			}
-		</script>
+	const float SIXTY = TAU / 6.0;
 
-		<script type="x-shader/x-fragment" id="fragment-shader">
-			#version 100
+	const float SCALE = 15.0;
+	const float THRESHOLD = 0.1;
 
-			precision highp float;
+	const float TWO_THIRDS = 2.0 / 3.0;
 
-			uniform vec2 u_mouse;
+	const float ASPECT = sqrt(3.0);
+	const float OFFSET = sqrt(0.75);
 
-			varying vec2 v_pos;
+	vec2 rot(vec2 target, float angle) {
+		return vec2(target.x * cos(angle) + target.y * sin(angle), target.x * -sin(angle) + target.y * cos(angle));
+	}
 
-			const float PI = 3.1415926538;
-			const float TAU = (PI * 2.0);
+	float wave(float value) { return abs(value - floor(value + 0.5)) * 2.0; }
 
-			const float SIXTY = TAU / 6.0;
+	bool segmenter(float angle, float offset) {
+		const float INV_THRESHOLD = 1.0 - THRESHOLD;
 
-			const float SCALE = 5.0;
-			const float THRESHOLD = 0.05;
+		vec2 pos = (rot(v_pos * SCALE * sqrt(1.0 / 3.0), angle) + vec2(0, offset));
 
-			const float TWO_THIRDS = 2.0 / 3.0;
+		bool within_even_base = wave(pos.y * ASPECT) >= INV_THRESHOLD;
+		bool within_even_phase = wave(pos.x) >= TWO_THIRDS;
 
-			const float ASPECT = sqrt(3.0);
-			const float OFFSET = sqrt(0.75);
+		bool within_odd_base = wave(pos.y * ASPECT + 0.5) >= INV_THRESHOLD;
+		bool within_odd_phase = wave(pos.x + 0.5) >= TWO_THIRDS;
 
-			vec2 rot(vec2 target, float angle) {
-			    return vec2(target.x * cos(angle) + target.y * sin(angle), target.x * -sin(angle) + target.y * cos(angle));
-			}
+		return (within_even_base && within_even_phase) || (within_odd_base && within_odd_phase);
+	}
 
-			float wave(float value) { return abs(value - floor(value + 0.5)) * 2.0; }
+	ivec3 roundHex(vec2 uv) {
+		float z = -(uv.x + uv.y);
 
-			bool segmenter(float angle, float offset) {
-			    const float INV_THRESHOLD = 1.0 - THRESHOLD;
+		int rx = int(floor(uv.x + 0.5));
+		int ry = int(floor(uv.y + 0.5));
+		int rz = int(floor(z + 0.5));
 
-			    vec2 pos = (rot(v_pos * SCALE, angle) + vec2(0, offset));
+		float dx = abs(float(rx) - uv.x);
+		float dy = abs(float(ry) - uv.y);
+		float dz = abs(float(rz) - z);
 
-			    bool within_even_base = wave(pos.y * ASPECT) >= INV_THRESHOLD;
-			    bool within_even_phase = wave(pos.x) >= TWO_THIRDS;
+		if(dx > dy && dx > dz)
+			rx = -(ry + rz);
+		else if(dy > dz)
+			ry = -(rx + rz);
+		else
+			rz = -(rx + ry);
 
-			    bool within_odd_base = wave(pos.y * ASPECT + 0.5) >= INV_THRESHOLD;
-			    bool within_odd_phase = wave(pos.x + 0.5) >= TWO_THIRDS;
+		return ivec3(ry - rz, rz - rx, rx - ry);
+	}
 
-			    return (within_even_base && within_even_phase) || (within_odd_base && within_odd_phase);
-			}
+	ivec3 fromEuclidean(vec2 euclidean) {
+		float compx = euclidean.y / 1.0;
+		float compy = sqrt(1.0 / 3.0) * euclidean.x;
 
-			void main() {
-			    float dx = (u_mouse.x - v_pos.x) * 4.0;
-			    float dy = (u_mouse.y - v_pos.y) * 4.0;
-			    float highlight = 1.0 - (pow(dx, 2.0) + pow(dy, 2.0)) * 0.5;
+		return roundHex(vec2(compy + compx, compy - compx));
+	}
 
-			    gl_FragColor = vec4(
-			        float(segmenter(0.0, OFFSET)),
-			        float(segmenter(SIXTY, OFFSET)),
-			        float(segmenter(2.0 * SIXTY, OFFSET)),
-			        1.0
-			    ) + clamp(1.0 - (sqrt(v_pos.x * v_pos.x + v_pos.y * v_pos.y) * 50.0), 0.0, 0.25);
-			}
-		</script>
-	</head>
+	void main() {
+		/*
+		float dx = (u_mouse.x - v_pos.x) * 4.0;
+		float dy = (u_mouse.y - v_pos.y) * 4.0;
+		float highlight = 1.0 - (pow(dx, 2.0) + pow(dy, 2.0)) * 0.5;
 
-	<body>
-		<canvas id="canvas"></canvas>
+		gl_FragColor = vec4(
+			float(segmenter(0.0, OFFSET)),
+			float(segmenter(SIXTY, OFFSET)),
+			float(segmenter(2.0 * SIXTY, OFFSET)),
+			1.0
+		) + clamp(1.0 - (sqrt(v_pos.x * v_pos.x + v_pos.y * v_pos.y) * 50.0), 0.0, 0.25);
+		*/
 
-		<br />
+		ivec3 mins = ivec3(-3, -3, -3) * 2;
+		ivec3 maxs = ivec3(3, 3, 3) * 2;
 
-		<pre style="color: #ffffff" id="text">OK</pre>
-	</body>
-</html>
+		vec2 pos = v_pos * SCALE;
+
+		ivec3 res = fromEuclidean(pos);
+
+		bvec3 contains = bvec3(
+			mins.x < res.x && res.x < maxs.x,
+			mins.y < res.y && res.y < maxs.y,
+			mins.z < res.z && res.z < maxs.z
+		);
+
+		vec3 cf = 0.5 + 0.5 * vec3(contains);
+		vec3 cv = 0.5 + 0.5 * vec3(contains.x, contains.y, contains.z);
+
+		gl_FragColor = vec4(cv, 1.0)
+			- clamp(float(segmenter(0.0, OFFSET)) + float(segmenter(SIXTY, OFFSET)) + float(segmenter(2.0 * SIXTY, OFFSET)), 0.0, 1.0)
+			+ clamp(1.0 - (sqrt(v_pos.x * v_pos.x + v_pos.y * v_pos.y) * 75.0), 0.0, 1.0);
+	}
+</script>
+
+<script type="x-shader/x-vertex" id="vertex-shader">
+	precision highp float;
+
+	attribute vec3 a_pos;
+
+	varying vec2 v_pos;
+
+	void main() {
+		gl_Position = vec4(a_pos, 1.0);
+
+		v_pos = vec2(a_pos);
+	}
+</script>
+
+<link href="style.css" rel="stylesheet" />
+<script src="main.js"></script>
+
+<canvas id="canvas"></canvas>
+
+<br />
+
+<pre style="color: #ffffff" id="text">OK</pre>
