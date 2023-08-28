@@ -13,8 +13,8 @@
 
 	const float SIXTY = TAU / 6.0;
 
-	const float SCALE = 15.0;
-	const float THRESHOLD = 0.1;
+	const float SCALE = 5.0;
+	const float THRESHOLD = 0.025;
 
 	const float TWO_THIRDS = 2.0 / 3.0;
 
@@ -41,16 +41,48 @@
 		return (within_even_base && within_even_phase) || (within_odd_base && within_odd_phase);
 	}
 
-	ivec3 roundHex(vec2 uv) {
-		float z = -(uv.x + uv.y);
+	float hexrad(vec2 uv) {
+		vec2 r = vec2(sqrt(3.0), 1);
+		vec2 h = r / 2.0;
 
-		int rx = int(floor(uv.x + 0.5));
-		int ry = int(floor(uv.y + 0.5));
-		int rz = int(floor(z + 0.5));
+		vec2 a = mod(uv, r) - h;
+		vec2 b = mod(uv - h, r) - h;
 
-		float dx = abs(float(rx) - uv.x);
-		float dy = abs(float(ry) - uv.y);
-		float dz = abs(float(rz) - z);
+		vec2 gv = abs(dot(a, a) < dot(b, b) ? a : b);
+
+		return 0.5 - max(
+			dot(
+				gv,
+				normalize(r)
+			),
+			gv.y
+		);
+	}
+
+	bool border(vec2 pos) {
+		return hexrad(pos) > THRESHOLD;
+	}
+
+	vec3 roundHex2(vec3 floating) {
+		int rx = int(floor(floating.x + 0.5));
+		int ry = int(floor(floating.y + 0.5));
+		int rz = int(floor(floating.z + 0.5));
+
+		//return vec3(rx, ry, rz);
+
+		float dx = abs(float(rx) - floating.x);
+		float dy = abs(float(ry) - floating.y);
+		float dz = abs(float(rz) - floating.z);
+
+		//return vec3(dx, dy, dz);
+
+		/*
+		return vec3(
+			abs(float(rx) - floating.x),
+			abs(float(ry) - floating.y),
+			abs(float(rz) - floating.z)
+		);
+		/**/
 
 		if(dx > dy && dx > dz)
 			rx = -(ry + rz);
@@ -59,14 +91,28 @@
 		else
 			rz = -(rx + ry);
 
-		return ivec3(ry - rz, rz - rx, rx - ry);
+		return vec3(rx, ry, rz);
 	}
 
-	ivec3 fromEuclidean(vec2 euclidean) {
-		float compx = euclidean.y / 1.0;
-		float compy = sqrt(1.0 / 3.0) * euclidean.x;
+	vec3 fromEuclidean(vec2 euclidean) {
+		float compx = sqrt(3.0) * v_pos.x * 2.5;
+		float compy = v_pos.y * 2.5;
 
-		return roundHex(vec2(compy + compx, compy - compx));
+		compy *= -1.0; // TEMP: compensate for y=0 at bottom of canvas
+
+		return roundHex2(vec3(compy + compx, compy - compx, -2.0 * compy));
+	}
+
+	ivec3 fix(ivec3 cube) { return ivec3(cube.y - cube.z, cube.z - cube.x, cube.x - cube.y); }
+
+	int len(ivec2 hex) {
+		return int(max(
+			max(
+				abs(float(hex.x)),
+				abs(float(hex.y))
+			),
+			abs(float(-(hex.x + hex.y)))
+		));
 	}
 
 	void main() {
@@ -74,21 +120,16 @@
 		float dx = (u_mouse.x - v_pos.x) * 4.0;
 		float dy = (u_mouse.y - v_pos.y) * 4.0;
 		float highlight = 1.0 - (pow(dx, 2.0) + pow(dy, 2.0)) * 0.5;
-
-		gl_FragColor = vec4(
-			float(segmenter(0.0, OFFSET)),
-			float(segmenter(SIXTY, OFFSET)),
-			float(segmenter(2.0 * SIXTY, OFFSET)),
-			1.0
-		) + clamp(1.0 - (sqrt(v_pos.x * v_pos.x + v_pos.y * v_pos.y) * 50.0), 0.0, 0.25);
 		*/
 
-		ivec3 mins = ivec3(-3, -3, -3) * 2;
-		ivec3 maxs = ivec3(3, 3, 3) * 2;
-
 		vec2 pos = v_pos * SCALE;
+		bool border = segmenter(0.0, OFFSET) || segmenter(SIXTY, OFFSET) || segmenter(2.0 * SIXTY, OFFSET);
 
-		ivec3 res = fromEuclidean(pos);
+		vec3 res = fromEuclidean(pos);
+
+		/*
+		ivec3 mins = ivec3(0, 0, 0) * 2;
+		ivec3 maxs = ivec3(8, 8, 3) * 2;
 
 		bvec3 contains = bvec3(
 			mins.x < res.x && res.x < maxs.x,
@@ -96,11 +137,15 @@
 			mins.z < res.z && res.z < maxs.z
 		);
 
-		vec3 cf = 0.5 + 0.5 * vec3(contains);
-		vec3 cv = 0.5 + 0.5 * vec3(contains.x, contains.y, contains.z);
+		vec3 cv = 0.25 + 0.75 * vec3(contains);
+		*/
 
-		gl_FragColor = vec4(cv, 1.0)
-			- clamp(float(segmenter(0.0, OFFSET)) + float(segmenter(SIXTY, OFFSET)) + float(segmenter(2.0 * SIXTY, OFFSET)), 0.0, 1.0)
+		int cellSize = 8;
+
+		bool cf = len(ivec2(res)) < cellSize;
+		float test = float(len(ivec2(res))) / SCALE / 2.0;
+
+		gl_FragColor = (border ? vec4(vec3(0.25), 1.0) : vec4(vec3(hexrad(pos)), 1.0))
 			+ clamp(1.0 - (sqrt(v_pos.x * v_pos.x + v_pos.y * v_pos.y) * 75.0), 0.0, 1.0);
 	}
 </script>
