@@ -25,23 +25,7 @@
 		return vec2(target.x * cos(angle) + target.y * sin(angle), target.x * -sin(angle) + target.y * cos(angle));
 	}
 
-	float wave(float value) { return abs(value - floor(value + 0.5)) * 2.0; }
-
-	bool segmenter(float angle, float offset) {
-		const float INV_THRESHOLD = 1.0 - THRESHOLD;
-
-		vec2 pos = (rot(v_pos * SCALE * sqrt(1.0 / 3.0), angle) + vec2(0, offset));
-
-		bool within_even_base = wave(pos.y * ASPECT) >= INV_THRESHOLD;
-		bool within_even_phase = wave(pos.x) >= TWO_THIRDS;
-
-		bool within_odd_base = wave(pos.y * ASPECT + 0.5) >= INV_THRESHOLD;
-		bool within_odd_phase = wave(pos.x + 0.5) >= TWO_THIRDS;
-
-		return (within_even_base && within_even_phase) || (within_odd_base && within_odd_phase);
-	}
-
-	float hexrad(vec2 uv) {
+	float hex_rad(vec2 uv) {
 		vec2 r = vec2(sqrt(3.0), 1);
 		vec2 h = r / 2.0;
 
@@ -50,62 +34,39 @@
 
 		vec2 gv = abs(dot(a, a) < dot(b, b) ? a : b);
 
-		return 0.5 - max(
+		return max(
 			dot(
 				gv,
 				normalize(r)
 			),
 			gv.y
-		);
+		) * 2.0;
 	}
 
-	bool border(vec2 pos) {
-		return hexrad(pos) > THRESHOLD;
+	bool border(vec2 pos, float threshold) {
+		return hex_rad(pos) > (1.0 - threshold);
 	}
 
-	vec3 roundHex2(vec3 floating) {
-		int rx = int(floor(floating.x + 0.5));
-		int ry = int(floor(floating.y + 0.5));
-		int rz = int(floor(floating.z + 0.5));
+	vec2 hex_id(vec2 uv) {
+		vec2 r = vec2(sqrt(3.0), 1);
+		vec2 h = r / 2.0;
 
-		//return vec3(rx, ry, rz);
+		vec2 a = mod(uv, r) - h;
+		vec2 b = mod(uv - h, r) - h;
 
-		float dx = abs(float(rx) - floating.x);
-		float dy = abs(float(ry) - floating.y);
-		float dz = abs(float(rz) - floating.z);
+		vec2 gv = dot(a, a) < dot(b, b) ? a : b;
 
-		//return vec3(dx, dy, dz);
-
-		/*
-		return vec3(
-			abs(float(rx) - floating.x),
-			abs(float(ry) - floating.y),
-			abs(float(rz) - floating.z)
-		);
-		/**/
-
-		if(dx > dy && dx > dz)
-			rx = -(ry + rz);
-		else if(dy > dz)
-			ry = -(rx + rz);
-		else
-			rz = -(rx + ry);
-
-		return vec3(rx, ry, rz);
+		return uv - gv;
 	}
 
-	vec3 fromEuclidean(vec2 euclidean) {
-		float compx = sqrt(3.0) * v_pos.x * 2.5;
-		float compy = v_pos.y * 2.5;
+	vec3 from_euclidean(vec2 pos) {
+		float compx = sqrt(3.0) * pos.x / 2.0;
+		float compy = pos.y / 2.0;
 
-		compy *= -1.0; // TEMP: compensate for y=0 at bottom of canvas
-
-		return roundHex2(vec3(compy + compx, compy - compx, -2.0 * compy));
+		return vec3(compy + compx, compy - compx, -2.0 * compy);
 	}
 
-	ivec3 fix(ivec3 cube) { return ivec3(cube.y - cube.z, cube.z - cube.x, cube.x - cube.y); }
-
-	int len(ivec2 hex) {
+	int len(ivec3 hex) {
 		return int(max(
 			max(
 				abs(float(hex.x)),
@@ -115,37 +76,14 @@
 		));
 	}
 
+	vec3 col(vec2 pos) {
+		return from_euclidean(hex_id(pos)) / SCALE;
+	}
+
 	void main() {
-		/*
-		float dx = (u_mouse.x - v_pos.x) * 4.0;
-		float dy = (u_mouse.y - v_pos.y) * 4.0;
-		float highlight = 1.0 - (pow(dx, 2.0) + pow(dy, 2.0)) * 0.5;
-		*/
+		vec2 pos = v_pos * SCALE * vec2(1.0, -1.0); // compensate for y=0 at bottom of canvas and general view scaling
 
-		vec2 pos = v_pos * SCALE;
-		bool border = segmenter(0.0, OFFSET) || segmenter(SIXTY, OFFSET) || segmenter(2.0 * SIXTY, OFFSET);
-
-		vec3 res = fromEuclidean(pos);
-
-		/*
-		ivec3 mins = ivec3(0, 0, 0) * 2;
-		ivec3 maxs = ivec3(8, 8, 3) * 2;
-
-		bvec3 contains = bvec3(
-			mins.x < res.x && res.x < maxs.x,
-			mins.y < res.y && res.y < maxs.y,
-			mins.z < res.z && res.z < maxs.z
-		);
-
-		vec3 cv = 0.25 + 0.75 * vec3(contains);
-		*/
-
-		int cellSize = 8;
-
-		bool cf = len(ivec2(res)) < cellSize;
-		float test = float(len(ivec2(res))) / SCALE / 2.0;
-
-		gl_FragColor = (border ? vec4(vec3(0.25), 1.0) : vec4(vec3(hexrad(pos)), 1.0))
+		gl_FragColor = (border(pos, THRESHOLD) ? vec4(vec3(0.1), 1.0) : vec4(col(pos), 1.0))
 			+ clamp(1.0 - (sqrt(v_pos.x * v_pos.x + v_pos.y * v_pos.y) * 75.0), 0.0, 1.0);
 	}
 </script>
@@ -167,8 +105,10 @@
 <link href="style.css" rel="stylesheet" />
 <script src="main.js"></script>
 
-<canvas id="canvas"></canvas>
+<div id="container">
+	<canvas id="canvas"></canvas>
 
-<br />
+	<br />
 
-<pre style="color: #ffffff" id="text">OK</pre>
+	<pre style="color: #ffffff" id="text">OK</pre>
+</div>

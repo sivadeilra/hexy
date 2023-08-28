@@ -67,11 +67,15 @@ function render() {
 	gl.drawArrays(gl.TRIANGLES, 0, buffer.numberOfItems);
 }
 
+function padn(n) {
+	return `${n >= 0 ? ' ' : ''}${n}`;
+}
+
 function mousemove(/** @type MouseEvent */ evt) {
 	let [x, y] = [evt.offsetX / 512 - 1, 1 - evt.offsetY / 512];
 
 	gl.uniform2f(u_mouse, x, y);
-	text.innerText = `${x}\n${y}`;
+	text.innerText = `${padn(x)}\n${padn(y)}`;
 	render();
 }
 
