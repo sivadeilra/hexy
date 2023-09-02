@@ -59,11 +59,12 @@
 		return uv - gv;
 	}
 
-	vec3 from_euclidean(vec2 pos) {
+	vec2 from_euclidean(vec2 pos) {
 		float compx = sqrt(3.0) * pos.x / 2.0;
 		float compy = pos.y / 2.0;
 
-		return vec3(compy + compx, compy - compx, -2.0 * compy);
+		//return vec2(compy + compx, compy - compx);
+	       return mat2(1.0 / 3.0, -1.0 / 3.0, sqrt(1.0 / 3.0), sqrt(1.0 / 3.0)) * pos / (37.0 / 64.0);
 	}
 
 	int len(ivec3 hex) {
@@ -77,7 +78,7 @@
 	}
 
 	vec3 col(vec2 pos) {
-		return from_euclidean(hex_id(pos)) / SCALE;
+		return vec3(from_euclidean(hex_id(pos)), 0.0) / SCALE;
 	}
 
 	void main() {
